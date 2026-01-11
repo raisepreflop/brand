@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perfil Literario Público - Assessment</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="background-glob"></div>
+    <div class="background-glob glob-2"></div>
+
+    <div class="layout-wrapper">
+        <header>
+            <div class="header-content">
+                <div>
+                    <h1>Perfil Literario Público</h1>
+                    <p>Assessment Estratégico de Marca Personal para Escritores</p>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <section id="assessment-panel" class="glass-panel active">
+                <div id="assessment-selector" class="input-group">
+                    <label style="font-size: 1.2rem; margin-bottom: 1rem;">Selecciona tu perfil de autor para
+                        comenzar:</label>
+                    <div class="button-group">
+                        <button id="btn-fiction" class="btn-primary" style="height: auto; padding: 2rem;">
+                            <span style="display:block; font-size: 1.5rem; margin-bottom: 0.5rem;">Ficción</span>
+                            <span style="font-weight: 300; font-size: 0.9rem;">Novela, Relato, Guion</span>
+                        </button>
+                        <button id="btn-nonfiction" class="btn-primary" style="height: auto; padding: 2rem;">
+                            <span style="display:block; font-size: 1.5rem; margin-bottom: 0.5rem;">No Ficción</span>
+                            <span style="font-weight: 300; font-size: 0.9rem;">Ensayo, Autoayuda, Negocios</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="assessment-form-container" class="hidden">
+                    <div class="form-header">
+                        <button id="back-btn" class="btn-secondary" style="margin-bottom: 1rem;">← Volver</button>
+                        <h2 id="assessment-title" class="section-title" style="margin-top:0;">Formulario</h2>
+                    </div>
+                    <div id="questions-area"></div>
+                    <button id="calculate-btn" class="btn-primary" style="margin-top: 2rem; width: 100%;">Calcular
+                        Resultados & Ver DAFO</button>
+                </div>
+
+                <div id="assessment-results" class="hidden">
+                    <h2 class="section-title">Resultados y Plan Estratégico</h2>
+
+                    <div id="score-summary" class="results-grid"></div>
+
+                    <h3 class="section-title" style="margin-top: 2rem;">Matriz DAFO Personalizada</h3>
+                    <div id="dafo-container" class="dafo-grid"></div>
+
+                    <div
+                        style="margin-top: 3rem; text-align: center; display: flex; gap: 1rem; justify-content: center;">
+                        <button id="download-pdf-btn" class="btn-primary">📄 Descargar Informe PDF</button>
+                        <button id="print-btn" class="btn-secondary">🖨️ Guardar (Método Alternativo)</button>
+                        <button id="reset-assessment-btn" class="btn-secondary">Realizar Nuevo Análisis</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>

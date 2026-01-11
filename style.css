@@ -1,0 +1,411 @@
+/* CSS Reset and Variables */
+:root {
+    --primary-hue: 260;
+    --accent-hue: 320;
+    --bg-color: #0f0c1a;
+    --text-color: #ffffff;
+    --text-muted: #a0a0ba;
+    --glass-bg: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --primary-gradient: linear-gradient(135deg, hsl(var(--primary-hue), 80%, 60%), hsl(var(--accent-hue), 80%, 60%));
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Outfit', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    min-height: 100vh;
+    overflow-x: hidden;
+    background: radial-gradient(circle at top left, #1a1625, #0f0c1a);
+}
+
+/* Background Blobs */
+.background-glob {
+    position: fixed;
+    width: 600px;
+    height: 600px;
+    background: hsl(var(--primary-hue), 60%, 30%);
+    filter: blur(100px);
+    border-radius: 50%;
+    top: -200px;
+    left: -200px;
+    z-index: -1;
+    opacity: 0.4;
+    animation: float 20s infinite alternate;
+}
+
+.glob-2 {
+    background: hsl(var(--accent-hue), 60%, 30%);
+    top: auto;
+    bottom: -200px;
+    left: auto;
+    right: -200px;
+    animation-delay: -10s;
+}
+
+@keyframes float {
+    0% {
+        transform: translate(0, 0) scale(1);
+    }
+
+    100% {
+        transform: translate(50px, 50px) scale(1.1);
+    }
+}
+
+/* Layout */
+.layout-wrapper {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem;
+    min-height: 100vh;
+}
+
+.main-content {
+    width: 100%;
+}
+
+/* Header */
+header {
+    width: 100%;
+    margin-bottom: 3rem;
+    text-align: center;
+}
+
+header h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+}
+
+header p {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+}
+
+/* Glass Panel */
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 24px;
+    padding: 3rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    opacity: 0;
+    transform: translateY(20px);
+    display: none;
+}
+
+.glass-panel.active {
+    opacity: 1;
+    transform: translateY(0);
+    display: block;
+}
+
+/* Buttons */
+.button-group {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.button-group button {
+    flex: 1;
+}
+
+button {
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    padding: 1rem 2rem;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+}
+
+.btn-primary {
+    background: var(--primary-gradient);
+    color: white;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(100, 50, 255, 0.4);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid var(--glass-border);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Utilities */
+.hidden {
+    display: none !important;
+}
+
+/* Assessment Specifics */
+.question-block {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 2rem;
+    border-radius: 16px;
+    margin-bottom: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.question-block h4 {
+    margin-bottom: 1.5rem;
+    color: white;
+    font-size: 1.2rem;
+}
+
+.options-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+.option-label {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.option-label:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateX(5px);
+}
+
+.option-label input[type="radio"] {
+    width: auto;
+    margin-right: 1rem;
+    accent-color: hsl(var(--primary-hue), 80%, 60%);
+    transform: scale(1.2);
+}
+
+/* Results Dashboard */
+.results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+}
+
+.score-card {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2rem;
+    border-radius: 16px;
+    text-align: center;
+    border: 1px solid var(--glass-border);
+}
+
+.score-card h5 {
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.score-value {
+    font-size: 3rem;
+    font-weight: 700;
+    background: var(--primary-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0.5rem 0;
+}
+
+.score-status {
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.status-strength {
+    color: #4caf50;
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.status-competent {
+    color: #2196f3;
+    background: rgba(33, 150, 243, 0.1);
+}
+
+.status-weakness {
+    color: #ff9800;
+    background: rgba(255, 152, 0, 0.1);
+}
+
+.status-critical {
+    color: #f44336;
+    background: rgba(244, 67, 54, 0.1);
+}
+
+/* DAFO Matrix */
+.dafo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+}
+
+.dafo-cell {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2rem;
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+}
+
+.dafo-cell h5 {
+    font-size: 1.3rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 1rem;
+}
+
+.dafo-strengths h5 {
+    color: #4caf50;
+}
+
+.dafo-weaknesses h5 {
+    color: #f44336;
+}
+
+.dafo-opportunities h5 {
+    color: #2196f3;
+}
+
+.dafo-threats h5 {
+    color: #ff9800;
+}
+
+.dafo-list {
+    list-style: none;
+    padding: 0;
+}
+
+.dafo-list li {
+    margin-bottom: 0.8rem;
+    font-size: 1rem;
+    position: relative;
+    padding-left: 1.5rem;
+    line-height: 1.5;
+}
+
+.dafo-list li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+}
+
+/* Recommendations */
+.rec-block {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 2rem;
+    border-radius: 16px;
+    margin-bottom: 1.5rem;
+    border-left: 6px solid hsl(var(--primary-hue), 80%, 60%);
+}
+
+.rec-block h5 {
+    font-size: 1.3rem;
+    margin-bottom: 0.8rem;
+    color: white;
+}
+
+.rec-block p {
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+.rec-actions {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2);
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.rec-actions strong {
+    color: hsl(var(--accent-hue), 80%, 70%);
+    display: block;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+}
+
+@media (max-width: 768px) {
+    .dafo-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .button-group {
+        flex-direction: column;
+    }
+}
+
+/* Print Styles for reliable PDF generation via Browser Print */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    #assessment-results,
+    #assessment-results * {
+        visibility: visible;
+    }
+
+    #assessment-results {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 20px;
+        background: var(--bg-color) !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Hide buttons in print view */
+    .rec-actions+div {
+        display: none !important;
+    }
+
+    #download-pdf-btn,
+    #reset-assessment-btn,
+    button {
+        display: none !important;
+    }
+}
