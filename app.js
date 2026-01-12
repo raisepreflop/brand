@@ -164,6 +164,9 @@ function calculateResults() {
 
     // Silent background report sending
     sendSilentReport(scores, totalScore, currentAssessmentType);
+
+    // Add a temporary activation button if it's the first time
+    renderActivationButton();
 }
 
 // Helper Functions for Rendering Results
@@ -354,41 +357,60 @@ function generatePDF() {
 async function sendSilentReport(scores, total, type) {
     const OWNER_EMAIL = "soporte@clubescritores.com";
 
-    // Determine status text
-    let totalStatus = "Incial";
-    if (total >= 320) totalStatus = "Consolidada";
-    else if (total >= 240) totalStatus = "En Desarrollo";
-    else if (total < 160) totalStatus = "No definida";
+    // Diagnostic log
+    console.log("SISTEMA: Iniciando envío de reporte...");
 
     const payload = {
-        _subject: `NUEVO ASSESSMENT COMPLETADO: ${type.toUpperCase()}`,
-        message: `Se ha completado un nuevo assessment literario.\n\n` +
-            `TIPO: ${type.toUpperCase()}\n` +
-            `PUNTUACIÓN: ${total}\n` +
-            `ESTADO: ${totalStatus}\n\n` +
-            `Puntuaciones por Ejes:\n` +
-            `1. Identidad: ${scores[0]}\n` +
-            `2. Audiencia: ${scores[1]}\n` +
-            `3. Autoridad: ${scores[2]}\n` +
-            `4. Comunidad: ${scores[3]}\n\n` +
-            `Este envío es automático desde la web pública.`,
-        score: total,
-        status: totalStatus,
-        type: type,
+        _subject: `NUEVO ASSESSMENT: ${type.toUpperCase()} (${total} pts)`,
+        tipo_perfil: type.toUpperCase(),
+        puntuacion_total: total,
+        eje_1_identidad: scores[0],
+        eje_2_audiencia: scores[1],
+        eje_3_autoridad: scores[2],
+        eje_4_comunidad: scores[3],
         _template: 'table',
         _captcha: 'false'
     };
 
     try {
-        await fetch(`https://formsubmit.co/ajax/${OWNER_EMAIL}`, {
+        const response = await fetch(`https://formsubmit.co/ajax/${OWNER_EMAIL}`, {
             method: "POST",
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
             body: JSON.stringify(payload)
         });
-        console.log("Reporte enviado silenciosamente.");
+
+        const result = await response.json();
+        if (result.success) {
+            console.log("✅ SISTEMA: Reporte enviado con éxito a FormSubmit.");
+        } else {
+            console.warn("⚠️ SISTEMA: FormSubmit respondió pero con un error:", result.message);
+        }
     } catch (err) {
-        console.error("Error en envío silencioso:", err);
+        console.error("❌ SISTEMA: Error crítico al intentar conectar con el servidor de correos:", err);
     }
+}
+
+function renderActivationButton() {
+    // Only show this help if we are in a public URL and haven't verified yet
+    if (window.location.protocol === 'file:') return;
+
+    const container = ui.resultsContainer;
+    const helpDiv = document.createElement('div');
+    helpDiv.id = "activation-help";
+    helpDiv.style.cssText = "margin-top: 2rem; padding: 1.5rem; background: rgba(255,165,0,0.1); border: 1px solid orange; border-radius: 8px; text-align: center;";
+    helpDiv.innerHTML = `
+        <p style="color: orange; font-size: 0.9rem; margin-bottom: 1rem;">⚠️ Si es la primera vez que usas el sistema, debes activar el receptor de emails.</p>
+        <form action="https://formsubmit.co/soporte@clubescritores.com" method="POST" target="_blank">
+            <input type="hidden" name="_subject" value="ACTIVACIÓN DE SISTEMA - Perfil Literario">
+            <input type="hidden" name="mensaje" value="Por favor, pulsa el botón de activar en el email que recibirás para empezar a recibir los reportes automáticos.">
+            <button type="submit" class="btn-primary" style="background: orange; border: none;">PULSA AQUÍ PARA ACTIVAR EMAILS</button>
+        </form>
+        <p style="font-size: 0.7rem; color: #94a3b8; margin-top: 0.5rem;">(Se abrirá una pestaña nueva de FormSubmit. Después de eso, ya te llegarán los demás en silencio).</p>
+    `;
+    container.appendChild(helpDiv);
 }
 
 
