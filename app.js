@@ -1,806 +1,551 @@
-// FictionOS - Application Logic
 
-// DOM Elements
-const contentArea = document.getElementById('content-area');
-const pageTitle = document.getElementById('page-title');
-const navItems = document.querySelectorAll('.nav-item');
-const btnRefresh = document.getElementById('refresh-btn');
-const btnGenerate = document.getElementById('generate-btn');
+/* =========================================
+   PERFIL LITERARIO PÚBLICO - APP LOGIC
+   ========================================= */
 
-// State
-let projectTitle = "The Ides of Summit"; // Default, ideally read from metadata file
-const MAX_TITLE_LENGTH = 50;
+const ui = {
+    selector: document.getElementById('assessment-selector'),
+    formContainer: document.getElementById('assessment-form-container'),
+    resultsContainer: document.getElementById('assessment-results'),
+    title: document.getElementById('assessment-title'),
+    questionsArea: document.getElementById('questions-area'),
+    scoreSummary: document.getElementById('score-summary'),
+    dafoContainer: document.getElementById('dafo-container'),
+    recContainer: document.getElementById('recommendations-container'),
 
-// Icon initialization
-const initIcons = () => lucide.createIcons();
-initIcons();
+    // Buttons
+    btnFiction: document.getElementById('btn-fiction'),
+    btnNonfiction: document.getElementById('btn-nonfiction'),
+    btnBack: document.getElementById('back-btn'),
+    btnCalculate: document.getElementById('calculate-btn'),
+    btnReset: document.getElementById('reset-assessment-btn'),
+    btnDownloadPdf: document.getElementById('download-pdf-btn'),
+    btnPrint: document.getElementById('print-btn')
+};
 
-// --- Disk Status ---
-function updateDiskStatus() {
-    const dot = document.getElementById('disk-status-dot');
-    const text = document.getElementById('disk-status-text');
-    if (!dot || !text) return;
+let currentAssessmentType = '';
+let currentAnswers = {};
 
-    if (FileSystem.dirHandle) {
-        dot.classList.remove('offline');
-        dot.classList.add('online');
-        text.innerText = 'Disk: Connected';
-    } else {
-        dot.classList.remove('online');
-        dot.classList.add('offline');
-        text.innerText = 'Disk: Disconnected';
-    }
+// --- Event Listeners ---
+
+ui.btnFiction.addEventListener('click', () => startAssessment('fiction'));
+ui.btnNonfiction.addEventListener('click', () => startAssessment('nonfiction'));
+ui.btnBack.addEventListener('click', showSelector);
+ui.btnCalculate.addEventListener('click', calculateResults);
+ui.btnReset.addEventListener('click', showSelector);
+ui.btnDownloadPdf.addEventListener('click', generatePDF);
+if (ui.btnPrint) ui.btnPrint.addEventListener('click', () => window.print());
+
+
+// --- Core Functions ---
+
+function showSelector() {
+    ui.selector.classList.remove('hidden');
+    ui.formContainer.classList.add('hidden');
+    ui.resultsContainer.classList.add('hidden');
+    currentAnswers = {};
+    window.scrollTo(0, 0);
 }
 
-// --- Navigation Handler ---
-navItems.forEach(item => {
-    item.addEventListener('click', (e) => {
-        e.preventDefault();
-        navigateTo(item.dataset.tab);
-    });
-});
+function startAssessment(type) {
+    currentAssessmentType = type;
+    currentAnswers = {};
 
-function navigateTo(tabName) {
-    // Update active class
-    navItems.forEach(n => {
-        if (n.dataset.tab === tabName) n.classList.add('active');
-        else n.classList.remove('active');
-    });
+    // UI Updates
+    ui.selector.classList.add('hidden');
+    ui.resultsContainer.classList.add('hidden');
+    ui.formContainer.classList.remove('hidden');
 
-    // Render content
-    loadView(tabName);
+    // Set Title
+    const titleText = type === 'fiction'
+        ? 'Assessment para Autores de Ficción (Novela)'
+        : 'Assessment para Autores de No Ficción (Ensayo/Expertos)';
+    ui.title.innerText = titleText;
+
+    renderQuestions(type);
+    window.scrollTo(0, 0);
 }
 
-// --- Disk Logic ---
-// --- Disk Logic ---
-async function connectDisk() {
-    console.log("Attempting to connect disk... UI Button clicked.");
+function renderQuestions(type) {
+    const data = type === 'fiction' ? assessmentData.fiction : assessmentData.nonfiction;
+    const container = ui.questionsArea;
+    container.innerHTML = '';
 
-    // Diagnostic: Protocol check
-    if (window.location.protocol === 'file:') {
-        alert("⚠️ PROTOCOLO NO COMPATIBLE: Estás abriendo el archivo localmente (file://). \n\nPor seguridad, Chrome y Edge BLOQUEAN el acceso al disco en este modo. \n\nSOLUCIÓN: \n1. Abre una terminal en esta carpeta.\n2. Escribe: npx serve\n3. Abre la dirección http://localhost:3000 que aparecerá.");
-    }
+    data.forEach((eje, axisIndex) => {
+        const axisDiv = document.createElement('div');
+        axisDiv.innerHTML = `<h3 style="color:hsl(var(--primary-hue), 80%, 70%); margin: 2rem 0 1.5rem; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem;">${eje.title}</h3>`;
+        container.appendChild(axisDiv);
 
-    if (!window.showDirectoryPicker) {
-        alert("❌ NAVEGADOR NO COMPATIBLE: Safari y Firefox no permiten esta función. \n\nPor favor, usa la última versión de GOOGLE CHROME o MICROSOFT EDGE.");
+        eje.questions.forEach((q, qIndex) => {
+            const qId = `q_${axisIndex}_${qIndex}`;
+            const block = document.createElement('div');
+            block.className = 'question-block';
+
+            let html = `<h4>${qIndex + 1}. ${q.text}</h4><div class="options-container">`;
+
+            q.options.forEach((opt, optIndex) => {
+                // Points hidden for user but stored in value
+                html += `
+                    <label class="option-label">
+                        <input type="radio" name="${qId}" value="${opt.points}" data-axis="${axisIndex}">
+                        <span>${opt.label}</span>
+                    </label>
+                `;
+            });
+            html += `</div>`;
+            block.innerHTML = html;
+            container.appendChild(block);
+        });
+    });
+
+    // Add listeners to all new radio buttons
+    const radios = container.querySelectorAll('input[type="radio"]');
+    radios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            const points = parseInt(e.target.value);
+            const axis = parseInt(e.target.dataset.axis);
+            const qId = e.target.name;
+            currentAnswers[qId] = { points, axis };
+        });
+    });
+}
+
+function calculateResults() {
+    // 1. Capture answers directly from DOM (Stateless approach, more robust)
+    const inputs = document.querySelectorAll('#questions-area input[type="radio"]:checked');
+    const totalQuestions = document.querySelectorAll('.question-block').length; // accurate count of questions rendered
+
+    // Reset answers
+    currentAnswers = {};
+    const scores = [0, 0, 0, 0]; // 4 axes
+
+    inputs.forEach(input => {
+        const points = parseInt(input.value);
+        const axis = parseInt(input.getAttribute('data-axis'));
+        // Re-populate global state if needed, but mainly for scoring
+        const qId = input.name;
+        currentAnswers[qId] = { points, axis };
+
+        if (!isNaN(axis) && axis >= 0 && axis < 4) {
+            scores[axis] += points;
+        }
+    });
+
+    const answeredCount = inputs.length;
+
+    // Validation
+    if (answeredCount < totalQuestions) {
+        alert(`Por favor, responde todas las preguntas para obtener un resultado preciso.\n\nHas respondido ${answeredCount} de ${totalQuestions}.`);
+        // Find first unanswered question and scroll to it (optional UX improvement)
+        const allBlocks = document.querySelectorAll('.question-block');
+        for (const block of allBlocks) {
+            if (!block.querySelector('input:checked')) {
+                block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // flash effect
+                block.style.border = "1px solid #ff4444";
+                setTimeout(() => block.style.border = "none", 2000);
+                break;
+            }
+        }
         return;
     }
 
-    try {
-        // Clear previous handle to force a new picker
-        FileSystem.dirHandle = null;
-        await FileSystem.connect(true);
-        updateDiskStatus();
+    const totalScore = scores.reduce((a, b) => a + b, 0);
 
-        alert("✅ ¡Disco Conectado con Éxito!");
+    // Fade Out Form / Fade In Results
+    ui.formContainer.classList.add('hidden');
+    ui.resultsContainer.classList.remove('hidden');
+    window.scrollTo(0, 0);
 
-        if (getCurrentTab() === 'dashboard') renderDashboard();
-    } catch (e) {
-        console.error("Connection failed", e);
-        if (e.name === 'AbortError') {
-            showNotification("Conexión cancelada.");
+    const data = currentAssessmentType === 'fiction' ? assessmentData.fiction : assessmentData.nonfiction;
+    renderScoreSummary(scores, totalScore, data);
+    renderDAFO(scores, data);
+    renderRecommendations(scores, totalScore, data);
+
+    // Silent background report sending
+    sendSilentReport(scores, totalScore, currentAssessmentType);
+
+    // Add a temporary activation button if it's the first time
+    renderActivationButton();
+}
+
+// Helper Functions for Rendering Results
+
+function renderScoreSummary(scores, total, data) {
+    const container = ui.scoreSummary;
+    container.innerHTML = '';
+
+    // Total
+    let totalStatus = "Marca Personal Inicial";
+    if (total >= 320) totalStatus = "Marca Personal Consolidada";
+    else if (total >= 240) totalStatus = "Marca Personal en Desarrollo";
+    else if (total < 160) totalStatus = "Sin Marca Personal Definida";
+
+    let totalColor = "#f44336"; // Red
+    if (total >= 320) totalColor = "#4caf50"; // Green
+    else if (total >= 240) totalColor = "#2196f3"; // Blue
+    else if (total >= 160) totalColor = "#ff9800"; // Orange
+
+    container.innerHTML += `
+        <div class="score-card" style="grid-column: 1 / -1; background: rgba(255,255,255,0.08); border: 1px solid ${totalColor};">
+            <h5>PUNTUACIÓN TOTAL</h5>
+            <div class="score-value" style="-webkit-text-fill-color: ${totalColor}; background: none;">${total} / 400</div>
+            <div class="score-status" style="color:white; background: ${totalColor};">${totalStatus}</div>
+        </div>
+    `;
+
+    scores.forEach((score, index) => {
+        let status = "DEBILIDAD CRÍTICA";
+        let statusClass = "status-critical";
+        if (score >= 80) { status = "FORTALEZA"; statusClass = "status-strength"; }
+        else if (score >= 60) { status = "COMPETENTE"; statusClass = "status-competent"; }
+        else if (score >= 40) { status = "DEBILIDAD"; statusClass = "status-weakness"; }
+
+        // Use shortTitle from data
+        const title = data[index].shortTitle || data[index].title;
+
+        container.innerHTML += `
+            <div class="score-card">
+                <h5>${title}</h5>
+                <div class="score-value">${score}</div>
+                <div class="score-status ${statusClass}">${status}</div>
+            </div>
+        `;
+    });
+}
+
+function renderDAFO(scores, data) {
+    const container = ui.dafoContainer;
+    container.innerHTML = '';
+
+    const sections = {
+        fortalezas: [],
+        debilidades: [],
+        oportunidades: [],
+        amenazas: []
+    };
+
+    // Logic to populate DAFO based on scores
+    scores.forEach((score, index) => {
+        const axisName = data[index].shortTitle || data[index].title;
+        if (score >= 80) {
+            sections.fortalezas.push(`Alto rendimiento en <strong>${axisName}</strong> (${score} pts)`);
+            sections.oportunidades.push(`Monetizar la fortaleza en <strong>${axisName}</strong> creando productos premium.`);
+        } else if (score < 40) {
+            sections.debilidades.push(`Estado crítico en <strong>${axisName}</strong> (solo ${score} pts)`);
+            sections.amenazas.push(`Tu irrelevancia en <strong>${axisName}</strong> amenaza la viabilidad del proyecto.`);
+        } else if (score < 60) {
+            sections.debilidades.push(`Debilidad en <strong>${axisName}</strong>`);
+            sections.oportunidades.push(`Mejoras rápidas en <strong>${axisName}</strong> tendrán alto impacto.`);
         } else {
-            alert("❌ ERROR TÉCNICO:\n\nNombre: " + e.name + "\nDetalle: " + e.message + "\n\nSi el error es 'SecurityError', necesitas usar un servidor local (localhost) para que el explorador dé permiso.");
+            sections.fortalezas.push(`Competencia sólida en <strong>${axisName}</strong>`);
+            sections.oportunidades.push(`Refinar <strong>${axisName}</strong> para alcanzar nivel experto.`);
         }
-    }
-}
-
-// Bind sidebar button immediately
-const sidebarDiskBtn = document.getElementById('sidebar-disk-btn');
-if (sidebarDiskBtn) {
-    sidebarDiskBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        connectDisk();
     });
-}
-updateDiskStatus();
 
-// --- Global Actions ---
-if (btnRefresh) {
-    btnRefresh.addEventListener('click', () => {
-        const icon = btnRefresh.querySelector('i');
-        if (icon) {
-            icon.style.transition = 'transform 1s';
-            icon.style.transform = 'rotate(360deg)';
+    // Fallbacks if empty
+    if (sections.fortalezas.length === 0) sections.fortalezas.push("Tu voluntad de mejorar es tu base actual.");
+    if (sections.debilidades.length === 0) sections.debilidades.push("Cuidado con el exceso de confianza.");
+
+    const renderCell = (title, items, cls) => `
+        <div class="dafo-cell ${cls}">
+            <h5>${title}</h5>
+            <ul class="dafo-list">
+                ${items.map(i => `<li>${i}</li>`).join('')}
+            </ul>
+        </div>
+    `;
+
+    container.innerHTML += renderCell("FORTALEZAS (INTERNAS)", sections.fortalezas, "dafo-strengths");
+    container.innerHTML += renderCell("DEBILIDADES (INTERNAS)", sections.debilidades, "dafo-weaknesses");
+    container.innerHTML += renderCell("OPORTUNIDADES (EXTERNAS)", sections.oportunidades, "dafo-opportunities");
+    container.innerHTML += renderCell("AMENAZAS (EXTERNAS)", sections.amenazas, "dafo-threats");
+}
+
+function renderRecommendations(scores, total, data) {
+    const container = ui.recContainer;
+    container.innerHTML = '';
+
+    scores.forEach((score, index) => {
+        const axisTitle = data[index].title;
+        let rec = "";
+        let action = "";
+
+        if (score >= 80) {
+            rec = "Posicionamiento de Liderazgo. Tienes una ventaja competitiva clara aquí.";
+            action = "Escalar: Crea productos high-ticket, busca partnerships exclusivos y delega lo operativo.";
+        } else if (score >= 60) {
+            rec = "Posicionamiento Competente. Funciona, pero no destaca masivamente.";
+            action = "Optimizar: Aumenta la frecuencia de publicación y refina la calidad visual/narrativa.";
+        } else if (score >= 40) {
+            rec = "En Desarrollo. Es un punto de fricción actual.";
+            action = "Foco: Dedica los próximos 30 días a mejorar exclusivamente este eje.";
+        } else {
+            rec = "Estado Crítico. Esto está impidiendo tu crecimiento.";
+            action = "Fundamentos: Vuelve a lo básico. Define quién eres y a quién sirves antes de seguir.";
         }
-        setTimeout(() => location.reload(), 800);
-    });
-}
 
-if (btnGenerate) {
-    btnGenerate.addEventListener('click', () => {
-        showGenerationModal();
-    });
-}
-
-function getCurrentTab() {
-    const active = document.querySelector('.nav-item.active');
-    return active ? active.dataset.tab : 'dashboard';
-}
-
-// --- View Controller ---
-function loadView(viewName) {
-    pageTitle.innerText = viewName.charAt(0).toUpperCase() + viewName.slice(1);
-    contentArea.innerHTML = '';
-
-    // Inject "New Project" button in sidebar if not there (concept only, keeping valid UI)
-
-    switch (viewName) {
-        case 'dashboard':
-            renderDashboard();
-            break;
-        case 'agents':
-            renderAgentsView();
-            break;
-        case 'foundation':
-            renderFileList(systemData.sections.foundation, 'Story Foundation');
-            break;
-        case 'characters':
-            renderFileList(systemData.sections.characters, 'Characters');
-            break;
-        case 'worldbuilding':
-            renderFileList(systemData.sections.worldbuilding, 'Worldbuilding');
-            break;
-        case 'manuscript':
-            renderManuscriptView(); // Specialized view for export
-            break;
-        case 'review':
-            contentArea.innerHTML = `<div style="text-align:center; padding:3rem; color:#94a3b8"><h2>Revision Queue</h2><p>No pending revisions.</p></div>`;
-            break;
-        default:
-            contentArea.innerHTML = `<h2>Work in Progress</h2>`;
-    }
-    initIcons();
-}
-
-// --- Render Functions ---
-
-function renderDashboard() {
-    const totalFiles = Object.values(systemData.sections).flat().length - systemData.sections.agents.length;
-    const activeAgents = systemData.sections.agents.filter(a => a.status === 'active').length;
-
-    const html = `
-        <div class="dashboard-grid">
-            <div class="stat-card">
-                <span class="stat-title">Current Project</span>
-                <span class="stat-value text-accent" style="font-size:1.2rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${projectTitle}">${projectTitle}</span>
-                <button id="btn-new-project" class="btn-primary" style="margin-top:0.5rem; width:100%; font-size:0.8rem">New Project</button>
-            </div>
-            <div class="stat-card">
-                <span class="stat-title">Files Tracked</span>
-                <span class="stat-value">${totalFiles}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-title">System Actions</span>
-                <div style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
-                     <button id="btn-changelog" class="btn-secondary" style="width:100%; font-size:0.8rem">View Changelog</button>
-                     <button class="btn-secondary" onclick="showNotification('System Health: 100%')" style="width:100%; font-size:0.8rem">System Check</button>
-                     <button id="btn-connect-disk" class="btn-primary" style="width:100%; font-size:0.8rem; margin-top:0.5rem; background-color: #8b5cf6;">Connect Disk</button>
-                </div>
-            </div>
-
-            <div class="agent-status-panel">
-                <div class="panel-header">
-                    <h3>Active Agent Swarm</h3>
-                    <div style="display:flex; gap:0.5rem;">
-                        <span class="stat-value" style="font-size:1rem; margin-right:1rem">${activeAgents} Active</span>
-                        <button id="btn-manage-agents" class="btn-secondary" style="font-size:0.8rem">Manage Agents</button>
-                    </div>
-                </div>
-                <div class="agent-grid">
-                    ${systemData.sections.agents.map(agent => renderAgentCard(agent)).join('')}
-                </div>
-            </div>
-        </div>
-    `;
-
-    contentArea.innerHTML = html;
-
-    document.getElementById('btn-manage-agents').addEventListener('click', () => navigateTo('agents'));
-    document.getElementById('btn-new-project').addEventListener('click', showNewProjectModal);
-    document.getElementById('btn-changelog').addEventListener('click', showChangelogModal);
-
-    const btnConnect = document.getElementById('btn-connect-disk');
-    if (btnConnect) {
-        if (FileSystem.dirHandle) {
-            btnConnect.innerText = "Disk Connected";
-            btnConnect.style.backgroundColor = "#10b981";
-        }
-        btnConnect.addEventListener('click', connectDisk);
-    }
-}
-
-function renderAgentsView() {
-    const html = `
-        <div class="dashboard-grid" style="grid-template-columns: 1fr;">
-            <div class="agent-status-panel" style="margin-top:0">
-                 <div class="panel-header">
-                    <h3>Agent Swarm Control Center</h3>
-                    <button class="btn-primary" onclick="showGenerationModal()">+ New Task</button>
-                </div>
-                <div class="agent-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
-                    ${systemData.sections.agents.map(agent => renderAgentCard(agent, true)).join('')}
-                </div>
-            </div>
-        </div>
-    `;
-    contentArea.innerHTML = html;
-
-    // Attach listeners to dynamic buttons
-    document.querySelectorAll('.btn-agent-logs').forEach(btn => {
-        btn.addEventListener('click', (e) => showAgentLogModal(e.target.dataset.agent));
-    });
-    document.querySelectorAll('.btn-agent-config').forEach(btn => {
-        btn.addEventListener('click', (e) => showAgentConfigModal(e.target.dataset.agent));
-    });
-}
-
-function renderAgentCard(agent, expanded = false) {
-    const statusColor = agent.status === 'active' ? '#10b981' : '#94a3b8';
-    const statusClass = `status-${agent.status.toLowerCase()}`;
-
-    let extraControls = '';
-    if (expanded) {
-        extraControls = `
-            <div style="margin-top:1rem; display:flex; gap:0.5rem;">
-                <button class="btn-secondary btn-agent-logs" data-agent="${agent.name}" style="font-size:0.75rem; padding:0.4rem; flex:1">Logs</button>
-                <button class="btn-secondary btn-agent-config" data-agent="${agent.name}" style="font-size:0.75rem; padding:0.4rem; flex:1">Config</button>
-            </div>
-        `;
-    }
-
-    return `
-        <div class="agent-card">
-            <div class="agent-header">
-                <i data-lucide="bot" style="width:16px; color: ${statusColor}"></i>
-                <span class="agent-name">${agent.name}</span>
-            </div>
-             <span class="agent-status ${statusClass}">${agent.status}</span>
-            <div style="font-size:0.8rem; margin-top:0.5rem; color:#94a3b8">${agent.role}</div>
-            ${extraControls}
-        </div>
-    `;
-}
-
-function renderFileList(files, sectionTitle) {
-    renderGenericList(files, sectionTitle);
-}
-
-function renderManuscriptView() {
-    const files = systemData.sections.manuscript;
-    const listHtml = files.map((file, index) => renderFileItem(file, index)).join('');
-
-    contentArea.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem">
-            <h2>Manuscript</h2>
-            <div style="display:flex; gap:0.5rem">
-                <button id="btn-export-md" class="btn-secondary">
-                    <i data-lucide="file-text" style="width:16px; margin-right:5px; vertical-align:middle"></i> MD
-                </button>
-                <button id="btn-export-docx" class="btn-primary" style="background: #3b82f6;">
-                    <i data-lucide="download" style="width:16px; margin-right:5px; vertical-align:middle"></i> Export DOCX
-                </button>
-            </div>
-        </div>
-        <div class="file-list">
-            ${listHtml}
-        </div>
-    `;
-
-    bindEditListeners(files);
-    document.getElementById('btn-export-docx').addEventListener('click', exportToDocx);
-    document.getElementById('btn-export-md').addEventListener('click', exportToMarkdown);
-}
-
-function renderGenericList(files, sectionTitle) {
-    const listHtml = files.map((file, index) => renderFileItem(file, index)).join('');
-    contentArea.innerHTML = `
-        <h2 style="margin-bottom:1.5rem">${sectionTitle}</h2>
-        <div class="file-list">${listHtml}</div>
-    `;
-    bindEditListeners(files);
-}
-
-function renderFileItem(file, index) {
-    let badgeClass = 'badge-pending';
-    if (file.status === 'writing' || file.status === 'draft') badgeClass = 'badge-writing';
-    if (file.status === 'finished') badgeClass = 'badge-finished';
-
-    return `
-            <div class="file-item">
-                <div class="file-info">
-                    <i data-lucide="file" class="file-icon"></i>
-                    <div>
-                        <div style="font-weight:600">${file.title}</div>
-                        <div class="file-path">${file.path}</div>
-                    </div>
-                </div>
-                <div style="display:flex; align-items:center; gap:1rem">
-                    ${file.wordCount ? `<span style="font-family:monospace; font-size:0.8rem; color:#64748b">${file.wordCount} words</span>` : ''}
-                    <span class="status-badge ${badgeClass}">${file.status}</span>
-                    <button class="btn-secondary btn-edit" data-index="${index}" style="padding:0.3rem">Edit</button>
+        container.innerHTML += `
+            <div class="rec-block">
+                <h5>${axisTitle} (${score} pts)</h5>
+                <p>${rec}</p>
+                <div class="rec-actions">
+                    <strong>Acción Recomendada:</strong>
+                    ${action}
                 </div>
             </div>
         `;
-}
-
-function bindEditListeners(files) {
-    document.querySelectorAll('.btn-edit').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const index = e.target.dataset.index;
-            showEditor(files[index]);
-        });
     });
 }
 
+function generatePDF() {
+    const element = document.getElementById('assessment-results');
+    const btn = document.getElementById('download-pdf-btn');
 
-// --- New Feature Functions ---
+    // Visual feedback
+    if (btn) {
+        btn.innerText = "Preparando PDF...";
+        btn.disabled = true;
+    }
 
-function exportToDocx() {
-    // 1. Concatenate all chapter content
-    let fullText = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>${projectTitle}</title>
-    <style>
-        body { font-family: 'Times New Roman', serif; line-height: 1.5; }
-        h1 { text-align: center; font-size: 24pt; margin-bottom: 24pt; page-break-before: always; }
-        h2 { text-align: center; font-size: 18pt; margin-top: 18pt; margin-bottom: 12pt; }
-        p { margin-bottom: 12pt; text-align: justify; text-indent: 18pt; }
-        .chapter-break { page-break-before: always; }
-    </style>
-    </head><body>`;
+    // Configuration for html2pdf - simplified for maximum compatibility
+    const opt = {
+        margin: 10, // mm
+        filename: `perfil-literario-${currentAssessmentType || 'reporte'}.pdf`,
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: {
+            scale: 2, // Retain 2x for quality, but if it fails, fallback to 1 manually or via user retry
+            useCORS: true, // Needed if we have fonts from Google Fonts
+            logging: false
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
 
-    // Title Page
-    fullText += `<div style="text-align:center; margin-top:200pt;">
-        <h1 style="font-size:36pt; border:none;">${projectTitle}</h1>
-        <p style="text-align:center; font-size:14pt;">A Novel</p>
-    </div><br clear=all style='mso-special-character:line-break;page-break-before:always'>`;
+    // Temporarily hide buttons
+    const downloadBtn = document.getElementById('download-pdf-btn');
+    const resetBtn = document.getElementById('reset-assessment-btn');
+    const printBtn = document.getElementById('print-btn');
 
-    systemData.sections.manuscript.forEach(ch => {
-        if (ch.content) {
-            let htmlContent = ch.content
-                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-                .replace(/\*\*(.*)\*\*/gim, '<b>$1</b>')
-                .replace(/\*(.*)\*/gim, '<i>$1</i>')
-                .replace(/\n\n/gim, '</p><p>')
-                .replace(/^/gim, '')
-                .replace(/$/gim, '');
+    if (downloadBtn) downloadBtn.style.display = 'none';
+    if (resetBtn) resetBtn.style.display = 'none';
+    if (printBtn) printBtn.style.display = 'none';
 
-            fullText += `<div class="chapter">${htmlContent}</div><br clear=all style='mso-special-character:line-break;page-break-before:always'>`;
-        }
-    });
-
-    fullText += `</body></html>`;
-
-    // 2. Create Blob (MIME type for Word)
-    const blob = new Blob(['\ufeff', fullText], {
-        type: 'application/msword'
-    });
-
-    const filename = projectTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.doc';
-
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    showNotification(`Exported DOCX manuscript: ${filename}`);
-    document.body.removeChild(link);
-}
-
-function exportToMarkdown() {
-    let fullText = `# ${projectTitle}\n\n`;
-
-    systemData.sections.manuscript.forEach(ch => {
-        if (ch.content) {
-            fullText += `${ch.content}\n\n---\n\n`;
-        }
-    });
-
-    const blob = new Blob([fullText], { type: 'text/markdown' });
-    const filename = projectTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_full.md';
-
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    showNotification(`Exported Markdown manuscript: ${filename}`);
-    document.body.removeChild(link);
-}
-
-function showNewProjectModal() {
-    createModal('Create New Project', `
-        <div style="margin-bottom: 1.5rem;">
-            <label style="display:block; margin-bottom:0.5rem; font-size:0.9rem; color:#94a3b8">Project Title (Max ${MAX_TITLE_LENGTH} chars)</label>
-            <input type="text" id="new-project-title" maxlength="${MAX_TITLE_LENGTH}" 
-                style="width:100%; padding:0.8rem; background: var(--bg-dark); border: 1px solid var(--border); color:white; border-radius:6px; font-size:1rem;" 
-                placeholder="Enter novel title...">
-             <div style="text-align:right; font-size:0.75rem; color:#64748b; margin-top:0.3rem" id="char-count">0/${MAX_TITLE_LENGTH}</div>
-        </div>
-        <div style="margin-bottom: 1.5rem; display:flex; align-items:center; gap:0.5rem;">
-            <input type="checkbox" id="backup-checkbox" checked>
-            <label for="backup-checkbox" style="color:#e2e8f0; font-size:0.9rem">Download ZIP backup of current project?</label>
-        </div>
-        <div style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px;">
-            <p style="color: #fca5a5; font-size: 0.85rem; margin:0;">
-                <strong style="color: #f87171;">WARNING:</strong> This will overwrite all data in the current workspace with a blank template after backup.
-            </p>
-        </div>
-    `, (modal) => {
-        const input = modal.querySelector('#new-project-title');
-        const counter = modal.querySelector('#char-count');
-        const backupCheck = modal.querySelector('#backup-checkbox');
-
-        input.addEventListener('input', (e) => {
-            counter.innerText = `${e.target.value.length}/${MAX_TITLE_LENGTH}`;
-        });
-
-        return async () => {
-            const title = input.value.trim();
-            if (!title) return alert("Title required");
-
-            try {
-                // 1. Ensure Disk Connected
-                if (!FileSystem.dirHandle) {
-                    await FileSystem.connect(true);
-                    updateDiskStatus();
-                }
-
-                // 2. Trigger Backup if checked
-                if (backupCheck.checked) {
-                    showNotification("Creating Backup ZIP...");
-                    await FileSystem.createBackupZip(projectTitle);
-                }
-
-                // 3. Create NEW Folder Structure
-                showNotification(`Creating folder structure for: ${title}...`);
-                const slug = await FileSystem.createProjectStructure(title);
-
-                // 4. Update Memory Context
-                projectTitle = title;
-                systemData.projectInfo.title = title;
-
-                // Prefixe paths with project slug
-                for (const sec in systemData.sections) {
-                    if (sec === 'agents') continue;
-                    systemData.sections[sec].forEach(f => {
-                        // Ensure we don't double prefix if reset is called multiple times
-                        const lastPart = f.path.split('/').pop();
-                        const subDir = f.path.includes('manuscript') ? 'manuscript' :
-                            f.path.includes('story_foundation') ? 'docs/story_foundation' :
-                                f.path.includes('characters') ? 'docs/characters' :
-                                    f.path.includes('worldbuilding') ? 'docs/worldbuilding' :
-                                        f.path.includes('style') ? 'docs/style' : 'docs';
-
-                        f.path = `${slug}/${subDir}/${lastPart}`;
-                        f.status = 'pending';
-                        f.content = `# ${f.title}\n\n[New project content for ${title}]`;
-                        f.wordCount = 0;
-                    });
-                }
-
-                // 5. Save initial files to disk
-                await FileSystem.saveAllFiles();
-                await FileSystem.saveSystemData();
-
-                showNotification(`New Project '${title}' Created at /${slug}`);
-                setTimeout(() => location.reload(), 2000);
-            } catch (e) {
-                console.error(e);
-                alert("Error creating new project. Did you grant folder permissions?");
+    html2pdf().set(opt).from(element).save()
+        .then(() => {
+            if (btn) {
+                btn.innerText = "📄 Descargar Informe PDF";
+                btn.disabled = false;
             }
-        }
-    }, "Create New Folder");
-}
-
-function showChangelogModal() {
-    // In a real app, read from changelog.md
-    const logContent = `
-# System Changelog
-
-## 2026-01-11
-- **[SYSTEM]** Dashboard initialized. Version 1.0.
-- **[USER]** Created "The Ides of Summit" project structure.
-- **[AGENT:Drafting]** Drafted Chapters 1, 2, 3, 4, 5.
-- **[AGENT:Visual]** Generated mood board.
-- **[SYSTEM]** Export functionality added.
-    `;
-
-    const htmlContent = logContent.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-
-    createModal('System Changelog', `
-        <div style="background:#0f0c15; padding:1.5rem; border-radius:8px; height:300px; overflow-y:auto; font-family:monospace; line-height:1.6; border:1px solid #334155;">
-            ${htmlContent}
-        </div>
-    `, () => { });
-}
-
-function showAgentLogModal(agentName) {
-    createModal(`Logs: ${agentName}`, `
-        <div style="background:#0f0c15; padding:1rem; border-radius:8px; height:200px; overflow-y:auto; font-family:monospace; color:#94a3b8;">
-            <span style="color:#10b981">[INFO]</span> Agent initialized.<br>
-            <span style="color:#10b981">[INFO]</span> Context loaded (5k tokens).<br>
-            <span style="color:#f59e0b">[WARN]</span> Ambiguity in plot point C detected.<br>
-            <span style="color:#10b981">[INFO]</span> Task completed successfully.
-        </div>
-    `, () => { });
-}
-
-function showAgentConfigModal(agentName) {
-    createModal(`Config: ${agentName}`, `
-         <div style="margin-bottom: 1rem;">
-            <label style="display:block; margin-bottom:0.5rem; font-size:0.9rem; color:#94a3b8">Primary Model</label>
-            <select style="width:100%; padding:0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color:white; border-radius:6px;">
-                <option selected>Gemini 3 Pro</option>
-                <option>Claude Sonnet 4.5</option>
-                <option>Claude Opus 4.5</option>
-            </select>
-        </div>
-         <div style="margin-bottom: 1rem;">
-            <label style="display:block; margin-bottom:0.5rem; font-size:0.9rem; color:#94a3b8">Temperature</label>
-            <input type="range" min="0" max="1" step="0.1" value="0.7" style="width:100%">
-        </div>
-         <div style="margin-bottom: 1rem;">
-            <label style="display:block; margin-bottom:0.5rem; font-size:0.9rem; color:#94a3b8">Max Tokens</label>
-            <select style="width:100%; padding:0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color:white; border-radius:6px;">
-                <option>2048</option>
-                <option selected>4096</option>
-                <option>8192</option>
-            </select>
-        </div>
-    `, (modal) => {
-        return () => showNotification(`Configuration saved for ${agentName}`);
-    }, 'Save Config');
-}
-
-// --- Generic Modal Helper ---
-function createModal(title, contentHtml, onConfirmSetup, confirmText = 'Confirm') {
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
-        z-index: 3000; backdrop-filter: blur(5px);
-    `;
-
-    modal.innerHTML = `
-        <div style="background: var(--bg-panel); border: 1px solid var(--border); padding: 2rem; border-radius: 12px; width: 500px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
-            <h3 style="margin-bottom: 1.5rem;">${title}</h3>
-            ${contentHtml}
-            <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1.5rem">
-                <button class="btn-secondary" id="modal-cancel">Close</button>
-                ${onConfirmSetup ? `<button class="btn-primary" id="modal-confirm">${confirmText}</button>` : ''}
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    const close = () => modal.remove();
-    modal.querySelector('#modal-cancel').addEventListener('click', close);
-
-    if (onConfirmSetup) {
-        const onConfirm = onConfirmSetup(modal);
-        modal.querySelector('#modal-confirm').addEventListener('click', () => {
-            if (onConfirm) onConfirm();
-            close();
+            if (downloadBtn) downloadBtn.style.display = 'inline-block';
+            if (resetBtn) resetBtn.style.display = 'inline-block';
+            if (printBtn) printBtn.style.display = 'inline-block';
+        })
+        .catch(err => {
+            console.error('PDF Error:', err);
+            alert('Error al generar PDF. Intenta usar la opción "Imprimir" del navegador y "Guardar como PDF".');
+            if (btn) {
+                btn.innerText = "📄 Descargar Informe PDF";
+                btn.disabled = false;
+            }
+            if (downloadBtn) downloadBtn.style.display = 'inline-block';
+            if (resetBtn) resetBtn.style.display = 'inline-block';
+            if (printBtn) printBtn.style.display = 'inline-block';
         });
+}
+
+
+async function sendSilentReport(scores, total, type) {
+    const OWNER_EMAIL = "soporte@clubescritores.com";
+
+    // Diagnostic log
+    console.log("SISTEMA: Iniciando envío de reporte...");
+
+    const payload = {
+        _subject: `NUEVO ASSESSMENT: ${type.toUpperCase()} (${total} pts)`,
+        tipo_perfil: type.toUpperCase(),
+        puntuacion_total: total,
+        eje_1_identidad: scores[0],
+        eje_2_audiencia: scores[1],
+        eje_3_autoridad: scores[2],
+        eje_4_comunidad: scores[3],
+        _template: 'table',
+        _captcha: 'false'
+    };
+
+    try {
+        const response = await fetch(`https://formsubmit.co/ajax/${OWNER_EMAIL}`, {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            console.log("✅ SISTEMA: Reporte enviado con éxito a FormSubmit.");
+        } else {
+            console.warn("⚠️ SISTEMA: FormSubmit respondió pero con un error:", result.message);
+        }
+    } catch (err) {
+        console.error("❌ SISTEMA: Error crítico al intentar conectar con el servidor de correos:", err);
     }
 }
 
+function renderActivationButton() {
+    // Only show this help if we are in a public URL and haven't verified yet
+    if (window.location.protocol === 'file:') return;
 
-// --- Editor Modal (Preserved) ---
-function showEditor(file) {
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center;
-        z-index: 2000; backdrop-filter: blur(5px);
+    const container = ui.resultsContainer;
+    const helpDiv = document.createElement('div');
+    helpDiv.id = "activation-help";
+    helpDiv.style.cssText = "margin-top: 2rem; padding: 1.5rem; background: rgba(255,165,0,0.1); border: 1px solid orange; border-radius: 8px; text-align: center;";
+    helpDiv.innerHTML = `
+        <p style="color: orange; font-size: 0.9rem; margin-bottom: 1rem;">⚠️ Si es la primera vez que usas el sistema, debes activar el receptor de emails.</p>
+        <form action="https://formsubmit.co/soporte@clubescritores.com" method="POST" target="_blank">
+            <input type="hidden" name="_subject" value="ACTIVACIÓN DE SISTEMA - Perfil Literario">
+            <input type="hidden" name="mensaje" value="Por favor, pulsa el botón de activar en el email que recibirás para empezar a recibir los reportes automáticos.">
+            <button type="submit" class="btn-primary" style="background: orange; border: none;">PULSA AQUÍ PARA ACTIVAR EMAILS</button>
+        </form>
+        <p style="font-size: 0.7rem; color: #94a3b8; margin-top: 0.5rem;">(Se abrirá una pestaña nueva de FormSubmit. Después de eso, ya te llegarán los demás en silencio).</p>
     `;
-
-    // Use stored content if available, or placeholder
-    const content = file.content || `(Content for ${file.path} not loaded in demo)\n\nTry opening Manuscript chapters - they have content loaded.`;
-
-    modal.innerHTML = `
-        <div style="background: var(--bg-panel); border: 1px solid var(--border); width: 80%; height: 80%; border-radius: 12px; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
-            <div style="padding: 1rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #1f1a2e; border-radius: 12px 12px 0 0;">
-                <h3 style="margin: 0;">Editing: ${file.title}</h3>
-                <span style="font-family:monospace; color:#94a3b8; font-size:0.8rem;">${file.path}</span>
-            </div>
-            <div style="flex: 1; position: relative;">
-                <textarea id="editor-textarea" style="width: 100%; height: 100%; background: #0f0c15; color: #e2e8f0; border: none; padding: 2rem; font-family: 'JetBrains Mono', monospace; font-size: 1rem; line-height: 1.6; resize: none; outline: none;">${content}</textarea>
-            </div>
-            <div style="padding: 1rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 1rem; background: #1f1a2e; border-radius: 0 0 12px 12px;">
-                <button class="btn-secondary" id="editor-cancel">Cancel</button>
-                <button class="btn-primary" id="editor-save">Save Changes</button>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    // Close Handler
-    const close = () => modal.remove();
-    modal.querySelector('#editor-cancel').addEventListener('click', close);
-
-    // Save Handler
-    // Save Handler
-    modal.querySelector('#editor-save').addEventListener('click', async () => {
-        const newContent = modal.querySelector('#editor-textarea').value;
-        file.content = newContent; // Update memory
-
-        try {
-            showNotification('Saving to disk...');
-            if (!FileSystem.dirHandle) {
-                await FileSystem.connect(true);
-                updateDiskStatus();
-            }
-
-            await FileSystem.saveFile(file.path, newContent);
-            await FileSystem.saveSystemData();
-            showNotification('Changes saved to disk!');
-        } catch (err) {
-            console.error(err);
-            showNotification('Memory updated (Disk saving error)');
-        }
-        close();
-    });
+    container.appendChild(helpDiv);
 }
 
-// --- File System Helper ---
-const FileSystem = {
-    dirHandle: null,
 
-    async connect(force = false) {
-        if (!this.dirHandle || force) {
-            try {
-                this.dirHandle = await window.showDirectoryPicker({
-                    mode: 'readwrite'
-                });
-            } catch (e) {
-                console.log("Directory picker cancelled or failed", e);
-                throw e;
-            }
+// --- DATA STORE ---
+const assessmentData = {
+    fiction: [
+        {
+            title: "EJE 1: IDENTIDAD Y VOZ EDITORIAL",
+            shortTitle: "Voz Editorial",
+            questions: [
+                { text: "Claridad de tu voz narrativa única", options: [{ label: "Voz distintiva y consistente", points: 10 }, { label: "Definida pero evoluciona", points: 7 }, { label: "Explorando/Varía", points: 4 }, { label: "No tengo claridad", points: 0 }] },
+                { text: "Coherencia temática en tu obra", options: [{ label: "Temas centrales claros", points: 10 }, { label: "Temas relacionados", points: 7 }, { label: "Diversos sin conexión", points: 4 }, { label: "Sin temas recurrentes", points: 0 }] },
+                { text: "Tono emocional consistente", options: [{ label: "Distintivo y consistente", points: 5 }, { label: "Variaciones", points: 3 }, { label: "Cambia significativamente", points: 0 }] },
+                { text: "Especialización en género", options: [{ label: "Género específico y demandado", points: 15 }, { label: "Género popular, no especializado", points: 10 }, { label: "Múltiples géneros", points: 5 }, { label: "Sin claridad", points: 0 }] },
+                { text: "Alineación tendencias 2026", options: [{ label: "Alta demanda (Romantasy, Thriller, etc)", points: 10 }, { label: "Demanda moderada", points: 5 }, { label: "Baja demanda/Nicho", points: 0 }] },
+                { text: "Transparencia proceso", options: [{ label: "Comparto regularmente", points: 10 }, { label: "Ocasionalmente", points: 7 }, { label: "Raramente", points: 3 }, { label: "Nunca", points: 0 }] },
+                { text: "Conexión personal", options: [{ label: "Conexión profunda y comunicada", points: 10 }, { label: "Conexión pero no comunicada", points: 7 }, { label: "Entretenimiento puro", points: 3 }, { label: "Sin conexión", points: 0 }] },
+                { text: "Propósito inspirador", options: [{ label: "Claro y compartido", points: 5 }, { label: "No articulado", points: 3 }, { label: "No definido", points: 0 }] },
+                { text: "Coherencia visual", options: [{ label: "Identidad consistente todas plataformas", points: 10 }, { label: "Elementos visuales parciales", points: 7 }, { label: "Estética diferente por plataforma", points: 3 }, { label: "Sin identidad", points: 0 }] },
+                { text: "Promesa al lector", options: [{ label: "Experiencia clara definida", points: 10 }, { label: "Expectativas generales", points: 7 }, { label: "Obras diversas/confuso", points: 3 }, { label: "No establecida", points: 0 }] },
+                { text: "Tagline de marca", options: [{ label: "Memorable y efectivo", points: 5 }, { label: "Existe pero no memorable", points: 3 }, { label: "No tengo", points: 0 }] }
+            ]
+        },
+        {
+            title: "EJE 2: AUDIENCIA Y NICHO",
+            shortTitle: "Audiencia",
+            questions: [
+                { text: "Claridad lector ideal", options: [{ label: "Avatar detallado", points: 15 }, { label: "Perfil general", points: 10 }, { label: "Idea vaga", points: 5 }, { label: "No definido", points: 0 }] },
+                { text: "Alineación libro-lector", options: [{ label: "Diseñado para avatar", points: 10 }, { label: "Alineación general", points: 7 }, { label: "Lo que me gusta a mí", points: 3 }, { label: "No considero audiencia", points: 0 }] },
+                { text: "Necesidades emocionales", options: [{ label: "Sé exactamente qué satisfago", points: 10 }, { label: "Idea general", points: 7 }, { label: "No analizado", points: 3 }, { label: "Desconozco", points: 0 }] },
+                { text: "Seguidores totales", options: [{ label: "10,000+", points: 15 }, { label: "5,000-10,000", points: 10 }, { label: "1,000-5,000", points: 5 }, { label: "500-1,000", points: 2 }, { label: "<500", points: 0 }] },
+                { text: "Engagement Rate", options: [{ label: "Por encima benchmark", points: 10 }, { label: "Promedio", points: 7 }, { label: "Debajo", points: 3 }, { label: "No mido", points: 0 }] },
+                { text: "Tamaño Newsletter", options: [{ label: "5,000+", points: 10 }, { label: "1,000-5,000", points: 7 }, { label: "500-1,000", points: 4 }, { label: "100-500", points: 2 }, { label: "<100/Nada", points: 0 }] },
+                { text: "Uso Pinterest", options: [{ label: "Activo optimizado", points: 10 }, { label: "Sin estrategia", points: 7 }, { label: "Irregular", points: 3 }, { label: "No uso", points: 0 }] },
+                { text: "Estrategia Newsletter", options: [{ label: "Activa con lead magnets y ventas", points: 10 }, { label: "Activa sin monetización", points: 7 }, { label: "Irregular", points: 3 }, { label: "No tengo", points: 0 }] },
+                { text: "TikTok/Reels Aesthetic", options: [{ label: "Regular con engagement", points: 10 }, { label: "Ocasional", points: 7 }, { label: "Probado sin consistencia", points: 3 }, { label: "No uso", points: 0 }] }
+            ]
+        },
+        {
+            title: "EJE 3: AUTORIDAD Y PRUEBA SOCIAL",
+            shortTitle: "Autoridad",
+            questions: [
+                { text: "Libros publicados", options: [{ label: "5+", points: 15 }, { label: "3-4", points: 10 }, { label: "2", points: 7 }, { label: "1", points: 4 }, { label: "0", points: 0 }] },
+                { text: "Ventas totales", options: [{ label: "50,000+", points: 15 }, { label: "10k-50k", points: 10 }, { label: "5k-10k", points: 7 }, { label: "1k-5k", points: 4 }, { label: "<1k", points: 0 }] },
+                { text: "Modelo publicación", options: [{ label: "Tradicional prestigio / Bestseller", points: 10 }, { label: "Media / Ventas consistentes", points: 7 }, { label: "Pequeña / Modestas", points: 4 }, { label: "Sin publicar", points: 0 }] },
+                { text: "Reseñas Goodreads", options: [{ label: "500+ (4.0+)", points: 10 }, { label: "200-500 (3.8+)", points: 7 }, { label: "50-200 (3.5+)", points: 4 }, { label: "<50", points: 2 }, { label: "Sin presencia", points: 0 }] },
+                { text: "Reseñas Amazon", options: [{ label: "200+ (4.5+)", points: 10 }, { label: "100-200 (4.0+)", points: 7 }, { label: "50-100 (3.5+)", points: 4 }, { label: "<50", points: 2 }, { label: "Sin reseñas", points: 0 }] },
+                { text: "Premios", options: [{ label: "Nacional/Intl", points: 10 }, { label: "Regional/Mención", points: 7 }, { label: "Antologías prestigio", points: 3 }, { label: "Ninguno", points: 0 }] },
+                { text: "Coherencia Portadas", options: [{ label: "Profesionales y claras", points: 10 }, { label: "Buenas con inconsistencias", points: 7 }, { label: "Variable", points: 3 }, { label: "Amateur", points: 0 }] },
+                { text: "Foto Autor", options: [{ label: "Profesional high-quality", points: 5 }, { label: "Decente", points: 3 }, { label: "No tengo", points: 0 }] },
+                { text: "BookTok/Tube Presencia", options: [{ label: "Activa con menciones", points: 10 }, { label: "Moderada", points: 7 }, { label: "Mínima", points: 3 }, { label: "Ninguna", points: 0 }] },
+                { text: "Website Autor", options: [{ label: "Profesional actualizado", points: 5 }, { label: "Básico", points: 3 }, { label: "No tengo", points: 0 }] }
+            ]
+        },
+        {
+            title: "EJE 4: COMUNIDAD Y CONECTIVIDAD",
+            shortTitle: "Comunidad",
+            questions: [
+                { text: "Colaboraciones", options: [{ label: "Regular (antologías, podcasts)", points: 15 }, { label: "Algunas", points: 10 }, { label: "1-2 veces", points: 5 }, { label: "Ninguna", points: 0 }] },
+                { text: "Networking", options: [{ label: "Miembro activo comunidades", points: 10 }, { label: "Ocasional", points: 7 }, { label: "Poco activo", points: 3 }, { label: "No participo", points: 0 }] },
+                { text: "Intercambio Audiencias", options: [{ label: "Cross-promotion efectiva", points: 10 }, { label: "Intentos mixtos", points: 7 }, { label: "No estratégico", points: 3 }, { label: "No explorado", points: 0 }] },
+                { text: "Respuesta fans", options: [{ label: "Consistente", points: 15 }, { label: "Frecuente", points: 10 }, { label: "Ocasional", points: 5 }, { label: "Rara vez", points: 0 }] },
+                { text: "Dinámicas participativas", options: [{ label: "Regularmente involucre a lectores", points: 10 }, { label: "Algunas veces", points: 7 }, { label: "Rara vez", points: 3 }, { label: "Nunca", points: 0 }] },
+                { text: "Comunidad leal", options: [{ label: "Street team / Core group", points: 10 }, { label: "Lectores recurrentes", points: 7 }, { label: "Algunos", points: 3 }, { label: "No construida", points: 0 }] },
+                { text: "Habilidades digitales", options: [{ label: "Domino múltiples", points: 10 }, { label: "Decente", points: 7 }, { label: "Básico", points: 4 }, { label: "Limitado", points: 0 }] },
+                { text: "Craft escritura", options: [{ label: "Excepcional", points: 10 }, { label: "Sólido", points: 7 }, { label: "En desarrollo", points: 4 }, { label: "Básico", points: 0 }] },
+                { text: "Speaking/Presentaciones", options: [{ label: "Experiencia, cómodo", points: 5 }, { label: "Dispuesto a aprender", points: 3 }, { label: "Incómodo", points: 0 }] },
+                { text: "Personalidad", options: [{ label: "Carismática, conecto fácil", points: 5 }, { label: "Requiere esfuerzo", points: 3 }, { label: "Me cuesta", points: 0 }] }
+            ]
         }
-        return this.dirHandle;
-    },
-
-    async saveFile(relativePath, content) {
-        const root = await this.connect();
-        const parts = relativePath.split('/');
-
-        let currentDir = root;
-        // Navigate through subdirectories, creating them if they don't exist
-        for (let i = 0; i < parts.length - 1; i++) {
-            const dirName = parts[i];
-            currentDir = await currentDir.getDirectoryHandle(dirName, { create: true });
+    ],
+    nonfiction: [
+        {
+            title: "EJE 1: IDENTIDAD Y AUTORIDAD",
+            shortTitle: "Identidad/Autoridad",
+            questions: [
+                { text: "Claridad Expertise", options: [{ label: "Nicho específico definido", points: 15 }, { label: "General", points: 10 }, { label: "Amplia", points: 5 }, { label: "No definido", points: 0 }] },
+                { text: "Demanda Temática", options: [{ label: "Alta demanda tendencia 2026", points: 15 }, { label: "Moderada", points: 10 }, { label: "Nicho limitado", points: 5 }, { label: "Baja/Saturado", points: 0 }] },
+                { text: "Formación Académica", options: [{ label: "Doctorado/Máster", points: 10 }, { label: "Licenciatura", points: 7 }, { label: "Autodidacta+Certs", points: 4 }, { label: "Sin formal", points: 0 }] },
+                { text: "Experiencia Pro", options: [{ label: "10+ años", points: 15 }, { label: "5-10 años", points: 10 }, { label: "2-5 años", points: 6 }, { label: "<2 años", points: 3 }, { label: "Sin experiencia", points: 0 }] },
+                { text: "Credenciales Extra", options: [{ label: "Múltiples reconocidas", points: 5 }, { label: "Alguna", points: 3 }, { label: "Ninguna", points: 0 }] },
+                { text: "Propósito Claro", options: [{ label: "Transformacional comunicado", points: 10 }, { label: "No público", points: 7 }, { label: "Vago", points: 3 }, { label: "No definido", points: 0 }] },
+                { text: "Promesa Valor", options: [{ label: "Específica y medible", points: 10 }, { label: "General", points: 7 }, { label: "Confusa", points: 3 }, { label: "No definida", points: 0 }] },
+                { text: "Metodología Propia", options: [{ label: "Framework único con nombre", points: 5 }, { label: "Enfoque particular", points: 3 }, { label: "No tengo", points: 0 }] },
+                { text: "Thought Leadership", options: [{ label: "Reconocido y citado", points: 10 }, { label: "Construyendo", points: 7 }, { label: "Sin posicionamiento", points: 3 }, { label: "No trabajo activo", points: 0 }] },
+                { text: "Innovación", options: [{ label: "Perspectiva novedosa", points: 5 }, { label: "Sólida pero común", points: 3 }, { label: "Similar a otros", points: 0 }] }
+            ]
+        },
+        {
+            title: "EJE 2: AUDIENCIA Y PLATAFORMA",
+            shortTitle: "Audiencia/Plat",
+            questions: [
+                { text: "Claridad Audiencia", options: [{ label: "Avatar detallado (industria, cargo)", points: 15 }, { label: "Perfil general", points: 10 }, { label: "Idea vaga", points: 5 }, { label: "No definido", points: 0 }] },
+                { text: "Alineación Contenido", options: [{ label: "Diseñado para resolver problemas", points: 10 }, { label: "General", points: 7 }, { label: "Genérico", points: 3 }, { label: "No considero", points: 0 }] },
+                { text: "Capacidad Pago", options: [{ label: "Alto poder adquisitivo", points: 5 }, { label: "Moderado", points: 3 }, { label: "Bajo", points: 0 }] },
+                { text: "Presencia LinkedIn", options: [{ label: "Optimizado, 2-3x/sem, alto engagement", points: 15 }, { label: "Activo, engagement bajo", points: 10 }, { label: "Básico/Irregular", points: 5 }, { label: "Inactivo", points: 0 }] },
+                { text: "Seguidores Totales", options: [{ label: "10,000+", points: 10 }, { label: "5k-10k", points: 7 }, { label: "1k-5k", points: 4 }, { label: "500-1k", points: 2 }, { label: "<500", points: 0 }] },
+                { text: "Newsletter Pro", options: [{ label: "5000+ (25% open)", points: 10 }, { label: "1k-5k", points: 7 }, { label: "500-1k", points: 4 }, { label: "100-500", points: 2 }, { label: "<100/No", points: 0 }] },
+                { text: "Website Pro", options: [{ label: "Pro + Blog activo SEO", points: 10 }, { label: "Funcional", points: 7 }, { label: "Básico desactualizado", points: 3 }, { label: "No", points: 0 }] },
+                { text: "Medios Externos", options: [{ label: "Regular en medios reconocidos", points: 10 }, { label: "Algunos artículos", points: 7 }, { label: "Solo blog propio", points: 3 }, { label: "Nada", points: 0 }] },
+                { text: "Contenido Gratuito", options: [{ label: "Biblioteca extensa alto valor", points: 10 }, { label: "Algunos recursos", points: 7 }, { label: "Limitado", points: 3 }, { label: "No ofrezco", points: 0 }] },
+                { text: "Video/Audio", options: [{ label: "Activa (YouTube/Podcast)", points: 5 }, { label: "Ocasional", points: 3 }, { label: "Nada", points: 0 }] }
+            ]
+        },
+        {
+            title: "EJE 3: CREDIBILIDAD Y PRUEBA SOCIAL",
+            shortTitle: "Credibilidad",
+            questions: [
+                { text: "Libros Publicados", options: [{ label: "3+", points: 15 }, { label: "2", points: 10 }, { label: "1", points: 7 }, { label: "0", points: 0 }] },
+                { text: "Prestigio Editorial", options: [{ label: "Tradicional Top / Big 5", points: 10 }, { label: "Univ / Mediana", points: 7 }, { label: "Pequeña / Auto Pro", points: 4 }, { label: "Sin / Básica", points: 0 }] },
+                { text: "Ventas", options: [{ label: "Bestseller (Listas)", points: 10 }, { label: "10k+", points: 7 }, { label: "3k-10k", points: 4 }, { label: "1k-3k", points: 2 }, { label: "<1k", points: 0 }] },
+                { text: "Medios Tradicionales", options: [{ label: "Regulares (TV/Prensa)", points: 15 }, { label: "Varias regional/industria", points: 10 }, { label: "1-3 menores", points: 5 }, { label: "Ninguna", points: 0 }] },
+                { text: "Podcasts/Digital", options: [{ label: "20+ relevantes", points: 10 }, { label: "10-20", points: 7 }, { label: "3-10", points: 4 }, { label: "<3", points: 0 }] },
+                { text: "Speaker", options: [{ label: "Pro 20+ charlas pagadas", points: 10 }, { label: "10-20 (pagadas o no)", points: 7 }, { label: "3-10 menores", points: 4 }, { label: "1-2", points: 2 }, { label: "0", points: 0 }] },
+                { text: "Premios", options: [{ label: "Nacional/Intl", points: 10 }, { label: "Regional/Industria", points: 7 }, { label: "Menciones", points: 3 }, { label: "Ninguno", points: 0 }] },
+                { text: "Reseñas/Testimonios", options: [{ label: "200+ (4.5+) Transformación", points: 10 }, { label: "100-200 (4.0+)", points: 7 }, { label: "50-100", points: 4 }, { label: "<50", points: 0 }] },
+                { text: "Citas expertos", options: [{ label: "Regularmente citado", points: 5 }, { label: "Ocasional", points: 3 }, { label: "Nunca", points: 0 }] },
+                { text: "Identidad Visual", options: [{ label: "Completa y consistente", points: 5 }, { label: "Básica", points: 3 }, { label: "Ninguna", points: 0 }] }
+            ]
+        },
+        {
+            title: "EJE 4: MONETIZACIÓN Y ECOSISTEMA",
+            shortTitle: "Negocio/$$$",
+            questions: [
+                { text: "Ingresos Libros", options: [{ label: "$20k+/año", points: 10 }, { label: "$10k-20k", points: 7 }, { label: "$3k-10k", points: 4 }, { label: "$1k-3k", points: 2 }, { label: "<$1k", points: 0 }] },
+                { text: "Ingresos Speaking", options: [{ label: "$30k+/año", points: 10 }, { label: "$15k-30k", points: 7 }, { label: "$5k-15k", points: 4 }, { label: "$1k-5k", points: 2 }, { label: "<$1k", points: 0 }] },
+                { text: "Cursos/Prod Digitales", options: [{ label: "$50k+/año", points: 10 }, { label: "$20k-50k", points: 7 }, { label: "$10k-20k", points: 4 }, { label: "$1k-10k", points: 2 }, { label: "<$1k", points: 0 }] },
+                { text: "Consultoría", options: [{ label: "$100k+/año", points: 10 }, { label: "$50k-100k", points: 7 }, { label: "$20k-50k", points: 4 }, { label: "$5k-20k", points: 2 }, { label: "<$5k", points: 0 }] },
+                { text: "Funnel Conversión", options: [{ label: "Completo optimizado", points: 10 }, { label: "Básico", points: 7 }, { label: "Incoherente", points: 3 }, { label: "Sin funnel", points: 0 }] },
+                { text: "Modelo Negocio", options: [{ label: "Claro escalable", points: 10 }, { label: "Definido en desarrollo", points: 7 }, { label: "Poco claro", points: 3 }, { label: "No definido", points: 0 }] },
+                { text: "Diversificación", options: [{ label: "4+ streams", points: 10 }, { label: "3 streams", points: 7 }, { label: "2 streams", points: 4 }, { label: "1/ninguno", points: 0 }] },
+                { text: "Habilidades Tech", options: [{ label: "Domino todo", points: 10 }, { label: "Decente", points: 7 }, { label: "Básico", points: 4 }, { label: "Limitado", points: 0 }] },
+                { text: "Comunicación", options: [{ label: "Excepcional", points: 10 }, { label: "Buenas", points: 7 }, { label: "Básicas", points: 4 }, { label: "Limitadas", points: 0 }] },
+                { text: "Red Colaboradores", options: [{ label: "Sólida", points: 10 }, { label: "Algunas", points: 7 }, { label: "Limitada", points: 3 }, { label: "Ninguna", points: 0 }] }
+            ]
         }
-
-        // Write file
-        const fileName = parts[parts.length - 1];
-        const fileHandle = await currentDir.getFileHandle(fileName, { create: true });
-        const writable = await fileHandle.createWritable();
-        await writable.write(content);
-        await writable.close();
-    },
-
-    async createProjectStructure(projectName) {
-        const slug = projectName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        const root = await this.connect();
-        const projectDir = await root.getDirectoryHandle(slug, { create: true });
-
-        // Setup initial structure
-        const subDirs = ['docs/story_foundation', 'docs/characters', 'docs/worldbuilding', 'docs/style', 'manuscript'];
-        for (const sd of subDirs) {
-            let current = projectDir;
-            const parts = sd.split('/');
-            for (const p of parts) {
-                current = await current.getDirectoryHandle(p, { create: true });
-            }
-        }
-        return slug;
-    },
-
-    async saveAllFiles() {
-        for (const sec in systemData.sections) {
-            if (sec === 'agents') continue;
-            for (const file of systemData.sections[sec]) {
-                await this.saveFile(file.path, file.content || "");
-            }
-        }
-    },
-
-    async readFile(relativePath) {
-        try {
-            const root = await this.connect();
-            const parts = relativePath.split('/');
-            let currentDir = root;
-            for (let i = 0; i < parts.length - 1; i++) {
-                currentDir = await currentDir.getDirectoryHandle(parts[i]);
-            }
-            const fileHandle = await currentDir.getFileHandle(parts[parts.length - 1]);
-            const file = await fileHandle.getFile();
-            return await file.text();
-        } catch (e) {
-            return null;
-        }
-    },
-
-    async createBackupZip(currentTitle) {
-        if (!window.JSZip) return alert("JSZip library not loaded.");
-        const zip = new JSZip();
-
-        const sections = ['foundation', 'characters', 'worldbuilding', 'style', 'manuscript'];
-        for (const sec of sections) {
-            if (systemData.sections[sec]) {
-                const folder = zip.folder(sec);
-                for (const file of systemData.sections[sec]) {
-                    const content = await this.readFile(file.path) || file.content || "";
-                    folder.file(file.title.replace(/[^a-z0-9]/gi, '_') + ".md", content);
-                }
-            }
-        }
-
-        zip.file("system_data.js", `const systemData = ${JSON.stringify(systemData, null, 4)};`);
-        const blob = await zip.generateAsync({ type: "blob" });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `${currentTitle.replace(/[^a-z0-9]/gi, '_')}_backup.zip`;
-        link.click();
-    },
-
-    async saveSystemData() {
-        const content = `const systemData = ${JSON.stringify(systemData, null, 4)};`;
-        await this.saveFile('system_data.js', content);
-    }
+    ]
 };
-
-function showGenerationModal() {
-    createModal('Trigger Agent Task', `
-         <div style="margin-bottom: 1rem;">
-            <label style="display:block; margin-bottom:0.5rem; font-size:0.9rem; color:#94a3b8">Select Agent</label>
-            <select style="width:100%; padding:0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color:white; border-radius:6px;">
-                <option>Drafting Agent</option>
-                <option>Revision Agent</option>
-                <option>Visual Agent</option>
-                <option>Research Agent</option>
-            </select>
-        </div>
-        <div style="margin-bottom: 1rem;">
-            <label style="display:block; margin-bottom:0.5rem; font-size:0.9rem; color:#94a3b8">Model</label>
-            <select style="width:100%; padding:0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color:white; border-radius:6px;">
-                <option value="gemini-pro">Gemini 3 Pro</option>
-                <option value="claude-sonnet">Claude Sonnet 4.5</option>
-                <option value="claude-opus">Claude Opus 4.5</option>
-            </select>
-        </div>
-        <div style="margin-bottom: 1rem;">
-            <label style="display:block; margin-bottom:0.5rem; font-size:0.9rem; color:#94a3b8">Task Prompt</label>
-            <textarea style="width:100%; height:80px; padding:0.5rem; background: var(--bg-dark); border: 1px solid var(--border); color:white; border-radius:6px; font-family:sans-serif;" placeholder="Describe what the agent should do..."></textarea>
-        </div>
-    `, () => showNotification('Task dispatched to agent swarm'), 'Run Task');
-}
-
-function showNotification(message, duration = 3000) {
-    const notif = document.createElement('div');
-    notif.innerText = message;
-    notif.style.cssText = `
-        position: fixed; bottom: 2rem; right: 2rem;
-        background: #3b82f6; color: white; padding: 1rem 2rem;
-        border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-        transform: translateY(100px); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        z-index: 9999;
-        border: 1px solid rgba(255,255,255,0.2);
-    `;
-    document.body.appendChild(notif);
-
-    requestAnimationFrame(() => notif.style.transform = 'translateY(0)');
-
-    setTimeout(() => {
-        notif.style.transform = 'translateY(100px)';
-        setTimeout(() => notif.remove(), 300);
-    }, duration);
-}
-
-// Initial Load
-navigateTo('dashboard');
